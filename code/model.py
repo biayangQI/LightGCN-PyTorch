@@ -195,6 +195,16 @@ class LightGCN(BasicModel):
         pos_emb_ego = self.embedding_item(pos_items)
         neg_emb_ego = self.embedding_item(neg_items)
         return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
+
+    def getEmbeddingFixed(self, users, items):
+        all_users, all_items = self.computer()
+        users_emb = all_users[users]
+        item_emb = all_items[items]
+
+        users_emb_ego = self.embedding_user(users)
+        item_emb_ego = self.embedding_item(items)
+
+        return users_emb, item_emb, users_emb_ego, item_emb_ego
     
     def bpr_loss(self, users, pos, neg):
         (users_emb, pos_emb, neg_emb, 
@@ -209,23 +219,36 @@ class LightGCN(BasicModel):
         loss = torch.mean(torch.nn.functional.softplus(neg_scores - pos_scores))
         return loss, reg_loss
 
-    def cross_entropy_loss(self, users, pos, neg):
-        (users_emb, pos_emb, neg_emb,
-         userEmb0, posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
+    # def cross_entropy_loss(self, users, pos, neg):
+    #     (users_emb, pos_emb, neg_emb,
+    #      userEmb0, posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
+    #     reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
+    #                           posEmb0.norm(2).pow(2) +
+    #                           negEmb0.norm(2).pow(2)) / float(len(users))
+    #     pos_scores = torch.mul(users_emb, pos_emb)
+    #     pos_scores = self.f(torch.sum(pos_scores, dim=1))
+    #     neg_scores = torch.mul(users_emb, neg_emb)
+    #     neg_scores = self.f(torch.sum(neg_scores, dim=1))
+    #     scores = torch.cat((pos_scores, neg_scores), axis=0)
+    #
+    #     target_pos = torch.ones(pos_scores.shape).to(world.device)
+    #     target_neg = torch.zeros(neg_scores.shape).to(world.device)
+    #     target = torch.cat((target_pos,target_neg), axis=0)
+    #     loss = self.loss(scores, target)
+    #
+    #     return loss, reg_loss
+
+    def cross_entropy_loss(self, batch):
+        users = batch[0]
+        items = batch[1]
+        labels = batch[2].float()
+        (users_emb, item_emb,
+         userEmb0, itemEmb0) = self.getEmbeddingFixed(users.long(), items.long())
         reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
-                              posEmb0.norm(2).pow(2) +
-                              negEmb0.norm(2).pow(2)) / float(len(users))
-        pos_scores = torch.mul(users_emb, pos_emb)
-        pos_scores = self.f(torch.sum(pos_scores, dim=1))
-        neg_scores = torch.mul(users_emb, neg_emb)
-        neg_scores = self.f(torch.sum(neg_scores, dim=1))
-        scores = torch.cat((pos_scores, neg_scores), axis=0)
-
-        target_pos = torch.ones(pos_scores.shape).to(world.device)
-        target_neg = torch.zeros(neg_scores.shape).to(world.device)
-        target = torch.cat((target_pos,target_neg), axis=0)
-        loss = self.loss(scores, target)
-
+                              itemEmb0.norm(2).pow(2)) / float(len(users))
+        item_scores = torch.mul(users_emb, item_emb)
+        item_scores = self.f(torch.sum(item_scores, dim=1))
+        loss = self.loss(item_scores, labels)
         return loss, reg_loss
 
 

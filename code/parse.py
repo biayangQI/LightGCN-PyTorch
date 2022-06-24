@@ -12,7 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Go lightGCN")
     parser.add_argument('--dataset_index', type=int, default=1,
                         help="1,2,3,4,5")
-    parser.add_argument('--task', type=str, default='ctr',
+    parser.add_argument('--task', type=str, default='topk',
                         help="['ctr', 'topk']")
 
 

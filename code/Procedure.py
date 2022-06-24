@@ -13,6 +13,7 @@ import utils
 import dataloader
 from pprint import pprint
 from utils import timer
+from dataloader import BasicDataset
 from time import time
 from tqdm import tqdm
 import model
@@ -26,7 +27,7 @@ CORES = multiprocessing.cpu_count() // 2
 def BPR_train_original(S, recommend_model, loss_class, epoch, neg_k=1, w=None):
     Recmodel = recommend_model
     Recmodel.train()
-    bpr: utils.BPRLoss = loss_class
+    loss_function: utils.BPRLoss = loss_class
     
     # with timer(name="Sample"):
     #     S = utils.UniformSample_original(dataset)
@@ -47,10 +48,36 @@ def BPR_train_original(S, recommend_model, loss_class, epoch, neg_k=1, w=None):
                                                    posItems,
                                                    negItems,
                                                    batch_size=world.config['bpr_batch_size'])):
-        cri = bpr.stageOne(batch_users, batch_pos, batch_neg)
+        cri = loss_function.stageOne(batch_users, batch_pos, batch_neg)
         aver_loss += cri
         if world.tensorboard:
             w.add_scalar(f'BPRLoss/BPR', cri, epoch * int(len(users) / world.config['bpr_batch_size']) + batch_i)
+    aver_loss = aver_loss / total_batch
+    time_info = timer.dict()
+    timer.zero()
+    return f"loss{aver_loss:.3f}-{time_info}"
+
+
+def BPR_train_original_fixed(dataset, recommend_model, loss_class, epoch, neg_k=1, w=None):
+    Recmodel = recommend_model
+    Recmodel.train()
+    loss_function: utils.BPRLoss = loss_class
+    dataset: BasicDataset
+
+    # with timer(name="Sample"):
+    #     S = utils.UniformSample_original(dataset)
+    # users = torch.Tensor(S[:, 0]).long()
+    # posItems = torch.Tensor(S[:, 1]).long()
+    # negItems = torch.Tensor(S[:, 2]).long()
+
+    trainTenor = dataset.trainTensor.to(world.device)
+    aver_loss = 0.
+    for (batch_i,
+         batch) in enumerate(utils.minibatch(trainTenor,
+                                                   batch_size=world.config['bpr_batch_size'])):
+        cri = loss_function.stageOne(batch)
+        aver_loss += cri
+    total_batch = trainTenor.shape[1] // world.config['bpr_batch_size'] + 1
     aver_loss = aver_loss / total_batch
     time_info = timer.dict()
     timer.zero()

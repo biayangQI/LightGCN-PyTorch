@@ -39,29 +39,48 @@ else:
     world.cprint("not enable tensorflowboard")
 
 try:
-    with timer(name="Sample"):  # sample only once for training
-        S = utils.UniformSample_original(dataset)
-
+    eval_recall10 = 0
+    result_topk = {}
+    result_ctr = {}
+    eval_auc = 0
+    best_epoch = []
     for epoch in range(world.TRAIN_epochs):
         start = time.time()
         if world.task == 'topk':
             if epoch %10 == 0:
                 print(f'EPOCH[{epoch + 1}/{world.TRAIN_epochs}]')
                 cprint("[EVAL]")
-                Procedure.Test(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
+                eval_result_epoch = Procedure.Test(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
+                eval_recall10_batch = eval_result_epoch['recall'][2]
+                if eval_recall10_batch > eval_recall10:
+                    eval_recall10 = eval_recall10_batch
+                    result_topk = eval_result_epoch
+                    torch.save(Recmodel.state_dict(), weight_file)
+                    best_epoch.append(epoch-1)
                 cprint("[TEST]")
                 Procedure.Test(dataset, Recmodel, epoch, 'test', w, world.config['multicore'])
-            output_information = Procedure.BPR_train_original(S, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
+            # output_information = Procedure.BPR_train_original_fixed(dataset, Recmodel, bpr, epoch, neg_k=Neg_k, w=w)
             # print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
             # torch.save(Recmodel.state_dict(), weight_file)
         elif world.task == 'ctr':
             if epoch %10 == 0:
                 cprint("[EVAL]")
-                Procedure.CTRTest(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
+                eval_result_epoch = Procedure.CTRTest(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
+                eval_auc_batch = eval_result_epoch['auc']
+                if eval_auc_batch > eval_auc:
+                    result_ctr = eval_result_epoch
+                    eval_auc = eval_auc_batch
+                    torch.save(Recmodel.state_dict(), weight_file)
+                    best_epoch.append(epoch - 1)
                 cprint("[TEST]")
                 Procedure.CTRTest(dataset, Recmodel, epoch, 'test', w, world.config['multicore'])
-            output_information = Procedure.BPR_train_original(S, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
-            print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
+        output_information = Procedure.BPR_train_original_fixed(dataset, Recmodel, bpr, epoch, neg_k=Neg_k, w=w)
+        print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
+    print(best_epoch)
+    if world.task == 'ctr':
+        print(result_ctr)
+    else:
+        print(result_topk)
 finally:
     if world.tensorboard:
         w.close()

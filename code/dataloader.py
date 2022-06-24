@@ -31,6 +31,10 @@ class BasicDataset(Dataset):
     @property
     def m_items(self):
         raise NotImplementedError
+
+    @property
+    def trainTensor(self):
+        raise NotImplementedError
     
     @property
     def trainDataSize(self):
@@ -232,6 +236,7 @@ class Loader(BasicDataset):
         self.m_item = 0  # same as n_user
         self.index_d = config['dataset_index']
         train_file = path + f'/lightgcn/train_{self.index_d}_gcn.txt'
+        train_file_fixed = path + f'/lightgcn/train_{self.index_d}.txt'
         eval_file = path + f'/lightgcn/eval_{self.index_d}_gcn.txt'
         test_file = path + f'/lightgcn/test_{self.index_d}_gcn.txt'
         eval_file_ctr = path + f'/lightgcn/eval_{self.index_d}.txt'
@@ -248,7 +253,7 @@ class Loader(BasicDataset):
         self.evalDataSizeCtr = 0
         self.testDataSizeCtr = 0
 
-
+        # ======================= Train ============================
         with open(train_file, "rb") as f:
             for l in pickle.load(f):
                 if len(l) > 0:
@@ -263,6 +268,22 @@ class Loader(BasicDataset):
         self.trainUniqueUsers = np.array(trainUniqueUsers)
         self.trainUser = np.array(trainUser)
         self.trainItem = np.array(trainItem)
+
+        trainUserFixed, trainItemFixed, trainLabelFixed = [],[],[]
+        with open(train_file_fixed, encoding='utf-8') as f:
+            for l in f.readlines():
+                if len(l) > 0:
+                    l = l.strip().split(' ')
+                    item_id = int(l[1])
+                    uid = int(l[0])
+                    label = int(l[2])
+                    trainUserFixed.extend([uid])
+                    trainItemFixed.extend([item_id])
+                    trainLabelFixed.extend([label])
+        self.trainUserFixed = np.array(trainUserFixed)  # 1-dimension
+        self.trainItemFixed = np.array(trainItemFixed)  # 1-dimension
+        self.trainLabelFixed = np.array(trainLabelFixed)  # 1-dimension
+
         #======================= Top K ============================
         with open(eval_file, "rb") as f:
             for l in pickle.load(f):
@@ -348,6 +369,7 @@ class Loader(BasicDataset):
         self._allPos = self.getUserPosItems(list(range(self.n_user)))  # 获取该用户交互的物品在矩阵 UserItemNet 中的列索引
         self.__evalDict = self.__build_eval()
         self.__testDict = self.__build_test()
+        self.__train_fixed = self.__build_train_fixed()
         self.__evalTensorCtr = self.__build_eval_ctr()
         self.__testTensorCtr = self.__build_test_ctr()
         print(f"{world.dataset} is ready to go")
@@ -371,6 +393,10 @@ class Loader(BasicDataset):
     @property
     def testDict(self):
         return self.__testDict
+
+    @property
+    def trainTensor(self):
+        return self.__train_fixed
 
     @property
     def evalTensorCtr(self):
@@ -444,13 +470,21 @@ class Loader(BasicDataset):
                 print("don't split the matrix")
         return self.Graph
 
-    def __build_eval_ctr(self): # todo:debug
+    def __build_train_fixed(self): # todo:debug
+        """
+                return:
+                    train_tensor: 3 * trainDataSize, uid, item_id, label
+        """
+        train_tensor = torch.cat((torch.tensor(self.trainUserFixed).view(1,-1), torch.tensor(self.trainItemFixed).view(1,-1), torch.tensor(self.trainLabelFixed).view(1,-1)), axis=0)
+        return train_tensor.long()
+
+
+    def __build_eval_ctr(self):
         """
                 return:
                     eval_tensor: 3 * evalDataSize, uid, item_id, label
         """
         eval_tensor = torch.cat((torch.tensor(self.evalUserCtr).view(1,-1), torch.tensor(self.evalItemCtr).view(1,-1), torch.tensor(self.evalLabelCtr).view(1,-1)), axis=0)
-        print(eval_tensor.shape)
         return eval_tensor.long()
 
     def __build_test_ctr(self):
@@ -459,7 +493,6 @@ class Loader(BasicDataset):
                     test_tensor: 3 * testDataSize, uid, item_id, label
         """
         test_tensor = torch.cat((torch.tensor(self.testUserCtr).view(1,-1), torch.tensor(self.testItemCtr).view(1,-1), torch.tensor(self.testLabelCtr).view(1,-1)), axis=0)
-        print(test_tensor.shape)
         return test_tensor.long()
 
 
