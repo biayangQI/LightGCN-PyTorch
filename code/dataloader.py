@@ -7,7 +7,7 @@ Xiangnan He et al. LightGCN: Simplifying and Powering Graph Convolution Network 
 Design Dataset here
 Every dataset's index has to start at 0
 """
-import os
+import os,pickle
 from os.path import join
 import sys
 import torch
@@ -218,10 +218,10 @@ class Loader(BasicDataset):
     """
     Dataset type for pytorch \n
     Incldue graph information
-    gowalla dataset
+    music dataset  (baed on gowalla dataset code)
     """
 
-    def __init__(self,config = world.config,path="../data/gowalla"):
+    def __init__(self,config = world.config,path="../data/music/lightgcn"):
         # train or test
         cprint(f'loading [{path}]')
         self.split = config['A_split']
@@ -230,18 +230,21 @@ class Loader(BasicDataset):
         self.mode = self.mode_dict['train']
         self.n_user = 0
         self.m_item = 0
-        train_file = path + '/train.txt'
-        test_file = path + '/test.txt'
-        self.path = path
+        index_d = config['dataset_index']
+        train_file = path + f'/lightgcn/train_{index_d}_gcn.txt'
+        eval_file = path + f'/lightgcn/eval_{index_d}_gcn.txt'
+        test_file = path + f'/lightgcn/test_{index_d}_gcn.txt'
+        self.path = path + f'/lightgcn'
         trainUniqueUsers, trainItem, trainUser = [], [], []
+        evalUniqueUsers, evalItem, evalUser = [], [], []
         testUniqueUsers, testItem, testUser = [], [], []
         self.traindataSize = 0
+        self.evalDataSize = 0
         self.testDataSize = 0
 
-        with open(train_file) as f:
-            for l in f.readlines():
+        with open(train_file, "rb") as f:
+            for l in pickle.load(f):
                 if len(l) > 0:
-                    l = l.strip('\n').split(' ')
                     items = [int(i) for i in l[1:]]
                     uid = int(l[0])
                     trainUniqueUsers.append(uid)
@@ -254,10 +257,24 @@ class Loader(BasicDataset):
         self.trainUser = np.array(trainUser)
         self.trainItem = np.array(trainItem)
 
-        with open(test_file) as f:
-            for l in f.readlines():
+        with open(eval_file, "rb") as f:
+            for l in pickle.load(f):
                 if len(l) > 0:
-                    l = l.strip('\n').split(' ')
+                    items = [int(i) for i in l[1:]]
+                    uid = int(l[0])
+                    evalUniqueUsers.append(uid)
+                    evalUser.extend([uid] * len(items))
+                    evalItem.extend(items)
+                    self.m_item = max(self.m_item, max(items))
+                    self.n_user = max(self.n_user, uid)
+                    self.evalDataSize += len(items)
+        self.evalUniqueUsers = np.array(evalUniqueUsers)
+        self.evalUser = np.array(evalUser)
+        self.evalItem = np.array(evalItem)
+
+        with open(test_file, "rb") as f:
+            for l in pickle.load(f):
+                if len(l) > 0:
                     items = [int(i) for i in l[1:]]
                     uid = int(l[0])
                     testUniqueUsers.append(uid)
@@ -274,8 +291,9 @@ class Loader(BasicDataset):
         
         self.Graph = None
         print(f"{self.trainDataSize} interactions for training")
+        print(f"{self.evalDataSize} interactions for evaling")
         print(f"{self.testDataSize} interactions for testing")
-        print(f"{world.dataset} Sparsity : {(self.trainDataSize + self.testDataSize) / self.n_users / self.m_items}")
+        print(f"{world.dataset} trian Sparsity : {(self.trainDataSize) / self.n_users / self.m_items}")
 
         # (users,items), bipartite graph
         self.UserItemNet = csr_matrix((np.ones(len(self.trainUser)), (self.trainUser, self.trainItem)),
@@ -285,7 +303,8 @@ class Loader(BasicDataset):
         self.items_D = np.array(self.UserItemNet.sum(axis=0)).squeeze()
         self.items_D[self.items_D == 0.] = 1.
         # pre-calculate
-        self._allPos = self.getUserPosItems(list(range(self.n_user)))
+        self._allPos = self.getUserPosItems(list(range(self.n_user))) # 获取该用户交互的物品在矩阵 UserItemNet 中的列索引
+        self.__evalDict = self.__build_eval()
         self.__testDict = self.__build_test()
         print(f"{world.dataset} is ready to go")
 
@@ -300,7 +319,11 @@ class Loader(BasicDataset):
     @property
     def trainDataSize(self):
         return self.traindataSize
-    
+
+    @property
+    def evalDict(self):
+        return self.__evalDict
+
     @property
     def testDict(self):
         return self.__testDict
@@ -309,7 +332,7 @@ class Loader(BasicDataset):
     def allPos(self):
         return self._allPos
 
-    def _split_A_hat(self,A):
+    def _split_A_hat(self,A): # NOTE: no change for music data
         A_fold = []
         fold_len = (self.n_users + self.m_items) // self.folds
         for i_fold in range(self.folds):
@@ -321,7 +344,7 @@ class Loader(BasicDataset):
             A_fold.append(self._convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(world.device))
         return A_fold
 
-    def _convert_sp_mat_to_sp_tensor(self, X):
+    def _convert_sp_mat_to_sp_tensor(self, X): # NOTE: no change for music data
         coo = X.tocoo().astype(np.float32)
         row = torch.Tensor(coo.row).long()
         col = torch.Tensor(coo.col).long()
@@ -336,7 +359,7 @@ class Loader(BasicDataset):
                 pre_adj_mat = sp.load_npz(self.path + '/s_pre_adj_mat.npz')
                 print("successfully loaded...")
                 norm_adj = pre_adj_mat
-            except :
+            except:
                 print("generating adjacency matrix")
                 s = time()
                 adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
@@ -364,9 +387,24 @@ class Loader(BasicDataset):
                 print("done split matrix")
             else:
                 self.Graph = self._convert_sp_mat_to_sp_tensor(norm_adj)
-                self.Graph = self.Graph.coalesce().to(world.device)
+                self.Graph = self.Graph.coalesce().to(world.device) # 对同一索引的多个值求和，ref：https://blog.csdn.net/qq_40697172/article/details/120516369
                 print("don't split the matrix")
         return self.Graph
+
+
+    def __build_eval(self):
+        """
+        return:
+            dict: {user: [items]}
+        """
+        eval_data = {}
+        for i, item in enumerate(self.evalItem):
+            user = self.evalUser[i]
+            if eval_data.get(user): # dict 中无该元素，返回None
+                eval_data[user].append(item)
+            else:
+                eval_data[user] = [item]
+        return eval_data
 
     def __build_test(self):
         """
@@ -376,7 +414,7 @@ class Loader(BasicDataset):
         test_data = {}
         for i, item in enumerate(self.testItem):
             user = self.testUser[i]
-            if test_data.get(user):
+            if test_data.get(user): # dict 中无该元素，返回None
                 test_data[user].append(item)
             else:
                 test_data[user] = [item]

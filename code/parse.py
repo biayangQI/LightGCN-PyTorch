@@ -10,6 +10,12 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Go lightGCN")
+    parser.add_argument('--dataset_index', type=int, default=1,
+                        help="1,2,3,4,5")
+    parser.add_argument('--task', type=str, default='topk',
+                        help="['ctr', 'topk']")
+
+
     parser.add_argument('--bpr_batch', type=int,default=2048,
                         help="the batch size for bpr loss training procedure")
     parser.add_argument('--recdim', type=int,default=64,
@@ -28,12 +34,12 @@ def parse_args():
                         help="the fold num used to split large adj matrix, like gowalla")
     parser.add_argument('--testbatch', type=int,default=100,
                         help="the batch size of users for testing")
-    parser.add_argument('--dataset', type=str,default='gowalla',
-                        help="available datasets: [lastfm, gowalla, yelp2018, amazon-book]")
+    parser.add_argument('--dataset', type=str,default='book',
+                        help="available datasets: [book, gowalla, yelp2018, amazon-book]")
     parser.add_argument('--path', type=str,default="./checkpoints",
                         help="path to save weights")
-    parser.add_argument('--topks', nargs='?',default="[20]",
-                        help="@k test list")
+    parser.add_argument('--topks', nargs='?',default="[1, 5, 10, 20, 50, 100, 200, 300, 500]",
+                        help="@k test list") # [1, 5, 10, 20, 50, 100, 200, 300, 500]
     parser.add_argument('--tensorboard', type=int,default=1,
                         help="enable tensorboard")
     parser.add_argument('--comment', type=str,default="lgn")

@@ -16,7 +16,7 @@ import multiprocessing
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 args = parse_args()
 
-ROOT_PATH = '/home/ylq/git/seqRS/current/LightGCN' # "/Users/gus/Desktop/light-gcn"
+ROOT_PATH = '/home/ylq/git/seqRS/LightGCN-Pytorch' # "/Users/gus/Desktop/light-gcn"
 CODE_PATH = join(ROOT_PATH, 'code')
 DATA_PATH = join(ROOT_PATH, 'data')
 BOARD_PATH = join(CODE_PATH, 'runs')
@@ -28,10 +28,12 @@ sys.path.append(join(CODE_PATH, 'sources'))
 if not os.path.exists(FILE_PATH):
     os.makedirs(FILE_PATH, exist_ok=True)
 
-
+task = args.task
 config = {}
-all_dataset = ['lastfm', 'gowalla', 'yelp2018', 'amazon-book']
+all_dataset = ['music', 'gowalla', 'book']
 all_models  = ['mf', 'lgn']
+
+config['dataset_index'] = args.dataset_index
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
 config['latent_dim_rec'] = args.recdim

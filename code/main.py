@@ -13,7 +13,6 @@ print(">>SEED:", world.seed)
 # ==============================
 import register
 from register import dataset
-
 Recmodel = register.MODELS[world.model_name](world.config, dataset)
 Recmodel = Recmodel.to(world.device)
 bpr = utils.BPRLoss(Recmodel, world.config)
@@ -40,12 +39,23 @@ else:
 try:
     for epoch in range(world.TRAIN_epochs):
         start = time.time()
-        if epoch %10 == 0:
-            cprint("[TEST]")
-            Procedure.Test(dataset, Recmodel, epoch, w, world.config['multicore'])
-        output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
-        print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
-        torch.save(Recmodel.state_dict(), weight_file)
+        if world.task == 'topk':
+            if epoch %10 == 0:
+                cprint("[EVAL]")
+                Procedure.Test(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
+                cprint("[TEST]")
+                Procedure.Test(dataset, Recmodel, epoch, 'test', w, world.config['multicore'])
+            output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
+            print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
+            # torch.save(Recmodel.state_dict(), weight_file)
+        elif world.task == 'ctr':
+            if epoch %10 == 0:
+                cprint("[EVAL]")
+                Procedure.CTRTest(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
+                cprint("[TEST]")
+                Procedure.CTRTest(dataset, Recmodel, epoch, 'test', w, world.config['multicore'])
+            output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
+            print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
 finally:
     if world.tensorboard:
         w.close()
