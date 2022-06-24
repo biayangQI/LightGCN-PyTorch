@@ -23,13 +23,13 @@ from sklearn.metrics import roc_auc_score
 CORES = multiprocessing.cpu_count() // 2
 
 
-def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=None):
+def BPR_train_original(S, recommend_model, loss_class, epoch, neg_k=1, w=None):
     Recmodel = recommend_model
     Recmodel.train()
     bpr: utils.BPRLoss = loss_class
     
-    with timer(name="Sample"):
-        S = utils.UniformSample_original(dataset)
+    # with timer(name="Sample"):
+    #     S = utils.UniformSample_original(dataset)
     users = torch.Tensor(S[:, 0]).long()
     posItems = torch.Tensor(S[:, 1]).long()
     negItems = torch.Tensor(S[:, 2]).long()
@@ -101,7 +101,7 @@ def CTRTest(dataset, Recmodel, epoch, mode='test', w=None, multicore=0):
         # auc_record = []
         # ratings = []
         total_batch = len(users) // u_batch_size + 1
-        for batch_users in utils.minibatch(users, batch_size=u_batch_size):
+        for batch_users in utils.minibatch(users, batch_size=u_batch_size): # user, items, labels need to be concated
             allPos = dataset.getUserPosItems(batch_users)
             groundTrue = [testDict[u] for u in batch_users]
             batch_users_gpu = torch.Tensor(batch_users).long()
@@ -192,7 +192,7 @@ def Test(dataset, Recmodel, epoch, mode='test', w=None, multicore=0):
             batch_users_gpu = torch.Tensor(batch_users).long()
             batch_users_gpu = batch_users_gpu.to(world.device)
 
-            rating = Recmodel.getUsersRating(batch_users_gpu)
+            rating = Recmodel.getUsersRating(batch_users_gpu)  # self.n_users * self.n_items
             #rating = rating.cpu()
             exclude_index = []
             exclude_items = []

@@ -7,6 +7,7 @@ from tensorboardX import SummaryWriter
 import time
 import Procedure
 from os.path import join
+from utils import timer
 # ==============================
 utils.set_seed(world.seed)
 print(">>SEED:", world.seed)
@@ -15,7 +16,8 @@ import register
 from register import dataset
 Recmodel = register.MODELS[world.model_name](world.config, dataset)
 Recmodel = Recmodel.to(world.device)
-bpr = utils.BPRLoss(Recmodel, world.config)
+# bpr = utils.BPRLoss(Recmodel, world.config)
+bpr = utils.CrossEntroyLoss(Recmodel, world.config)
 
 weight_file = utils.getFileName()
 print(f"load and save to {weight_file}")
@@ -37,16 +39,20 @@ else:
     world.cprint("not enable tensorflowboard")
 
 try:
+    with timer(name="Sample"):  # sample only once for training
+        S = utils.UniformSample_original(dataset)
+
     for epoch in range(world.TRAIN_epochs):
         start = time.time()
         if world.task == 'topk':
             if epoch %10 == 0:
+                print(f'EPOCH[{epoch + 1}/{world.TRAIN_epochs}]')
                 cprint("[EVAL]")
                 Procedure.Test(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
                 cprint("[TEST]")
                 Procedure.Test(dataset, Recmodel, epoch, 'test', w, world.config['multicore'])
-            output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
-            print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
+            output_information = Procedure.BPR_train_original(S, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
+            # print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
             # torch.save(Recmodel.state_dict(), weight_file)
         elif world.task == 'ctr':
             if epoch %10 == 0:

@@ -221,102 +221,83 @@ class Loader(BasicDataset):
     music dataset  (baed on gowalla dataset code)
     """
 
-    def __init__(self,config = world.config,path="../data/music/lightgcn"):
+    def __init__(self, config=world.config, path="../data/music/lightgcn"):
         # train or test
         cprint(f'loading [{path}]')
         self.split = config['A_split']
         self.folds = config['A_n_fold']
         self.mode_dict = {'train': 0, "test": 1}
         self.mode = self.mode_dict['train']
-        self.n_user = 0 # for nn.embedding parameter
-        self.m_item = 0 # same as self.n_user
-        index_d = config['dataset_index']
-        train_file = path + f'/lightgcn/train_{index_d}.txt'
-        eval_file = path + f'/lightgcn/eval_{index_d}.txt'
-        test_file = path + f'/lightgcn/test_{index_d}.txt'
+        self.n_user = 0
+        self.m_item = 0
+        self.index_d = config['dataset_index']
+        train_file = path + f'/lightgcn/train_{self.index_d}_gcn.txt'
+        eval_file = path + f'/lightgcn/eval_{self.index_d}_gcn.txt'
+        test_file = path + f'/lightgcn/test_{self.index_d}_gcn.txt'
         self.path = path + f'/lightgcn'
-        trainUniqueUsers, trainItem, trainUser, trainLabel, trainUserGraph, trainItemGraph = [], [], [], [], [], []
-        # trainUserGraph, trainItemGraph used for constructing bipartite graph
-        evalUniqueUsers, evalItem, evalUser, evalLabel = [], [], [], []
-        testUniqueUsers, testItem, testUser, testLabel = [], [], [], []
-        self.traindataSize = 0  # only true label
-        self.evalDataSize = 0  #inculde true label and false label
-        self.testDataSize = 0  #inculde true label and false label
+        trainUniqueUsers, trainItem, trainUser = [], [], []
+        evalUniqueUsers, evalItem, evalUser = [], [], []
+        testUniqueUsers, testItem, testUser = [], [], []
+        self.traindataSize = 0
+        self.evalDataSize = 0
+        self.testDataSize = 0
 
-        with open(train_file, encoding='utf-8') as f:
-            for l in f.readlines():
+        with open(train_file, "rb") as f:
+            for l in pickle.load(f):
                 if len(l) > 0:
-                    l = l.strip().split(' ')
-                    item_id = int(l[1])
+                    items = [int(i) for i in l[1:]]
                     uid = int(l[0])
-                    label = int(l[2])
-                    trainUniqueUsers.extend([uid])
-                    trainUser.extend([uid])
-                    trainItem.extend([item_id])
-                    trainLabel.extend([label])
-                    if label:
-                        trainUserGraph.extend([uid])
-                        trainItemGraph.extend([item_id])
-                        self.traindataSize += 1
-                    self.m_item = max(self.m_item, item_id)
+                    trainUniqueUsers.append(uid)
+                    trainUser.extend([uid] * len(items))
+                    trainItem.extend(items)
+                    self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-        self.trainUniqueUsers = np.array(trainUniqueUsers)  # 1-dimension
-        self.trainUser = np.array(trainUser)  # 1-dimension
-        self.trainItem = np.array(trainItem)  # 1-dimension
-        self.trainLabel = np.array(trainLabel)  # 1-dimension
-        self.trainUserGraph = np.array(trainUserGraph)
-        self.trainItemGraph = np.array(trainItemGraph)
+                    self.traindataSize += len(items)
+        self.trainUniqueUsers = np.array(trainUniqueUsers)
+        self.trainUser = np.array(trainUser)
+        self.trainItem = np.array(trainItem)
 
-        with open(eval_file, encoding='utf-8') as f:
-            for l in f.readlines():
+        with open(eval_file, "rb") as f:
+            for l in pickle.load(f):
                 if len(l) > 0:
-                    l = l.strip().split(' ')
-                    item_id = int(l[1])
+                    items = [int(i) for i in l[1:]]
                     uid = int(l[0])
-                    label = int(l[2])
-                    evalUniqueUsers.extend([uid])
-                    evalUser.extend([uid])
-                    evalItem.extend([item_id])
-                    evalLabel.extend([label])
-                    self.m_item = max(self.m_item, item_id)
+                    evalUniqueUsers.append(uid)
+                    evalUser.extend([uid] * len(items))
+                    evalItem.extend(items)
+                    self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.evalDataSize += 1
-        self.evalUniqueUsers = np.array(evalUniqueUsers)  # 1-dimension
-        self.evalUser = np.array(evalUser)  # 1-dimension
-        self.evalItem = np.array(evalItem)  # 1-dimension
-        self.evalLabel = np.array(evalLabel)  # 1-dimension
+                    self.evalDataSize += len(items)
+        self.evalUniqueUsers = np.array(evalUniqueUsers)
+        self.evalUser = np.array(evalUser)
+        self.evalItem = np.array(evalItem)
 
-        with open(test_file, encoding='utf-8') as f:
-            for l in f.readlines():
+        with open(test_file, "rb") as f:
+            for l in pickle.load(f):
                 if len(l) > 0:
-                    l = l.strip().split(' ')
-                    item_id = int(l[1])
+                    items = [int(i) for i in l[1:]]
                     uid = int(l[0])
-                    label = int(l[2])
-                    testUniqueUsers.extend([uid])
-                    testUser.extend([uid])
-                    testItem.extend([item_id])
-                    testLabel.extend([label])
-                    self.m_item = max(self.m_item, item_id)
+                    testUniqueUsers.append(uid)
+                    testUser.extend([uid] * len(items))
+                    testItem.extend(items)
+                    self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.testDataSize += 1
-        self.testUniqueUsers = np.array(testUniqueUsers)  # 1-dimension
-        self.testUser = np.array(testUser)  # 1-dimension
-        self.testItem = np.array(testItem)  # 1-dimension
-        self.testLabel = np.array(testLabel)  # 1-dimension
-
+                    self.testDataSize += len(items)
         self.m_item += 1
         self.n_user += 1
-        
+        self.testUniqueUsers = np.array(testUniqueUsers)
+        self.testUser = np.array(testUser)
+        self.testItem = np.array(testItem)
+
         self.Graph = None
-        print(f"{self.trainDataSize} interactions(only true label) for training")
+        print(f"{self.trainDataSize} interactions for training")
         print(f"{self.evalDataSize} interactions for evaling")
         print(f"{self.testDataSize} interactions for testing")
         print(f"{world.dataset} trian Sparsity : {(self.trainDataSize) / self.n_users / self.m_items}")
 
         # (users,items), bipartite graph
-        self.UserItemNet = csr_matrix((np.ones(len(self.trainUserGraph)), (self.trainUserGraph, self.trainItemGraph)),
-                                      shape=(self.n_user, self.m_item))  # (vale, (row_index, col_index), shape)
+        self.UserItemNet = csr_matrix((np.ones(len(self.trainUser)), (self.trainUser, self.trainItem)),
+                                      shape=(self.n_user, self.m_item))
         self.users_D = np.array(self.UserItemNet.sum(axis=1)).squeeze()
         self.users_D[self.users_D == 0.] = 1
         self.items_D = np.array(self.UserItemNet.sum(axis=0)).squeeze()
@@ -330,11 +311,11 @@ class Loader(BasicDataset):
     @property
     def n_users(self):
         return self.n_user
-    
+
     @property
     def m_items(self):
         return self.m_item
-    
+
     @property
     def trainDataSize(self):
         return self.traindataSize
@@ -351,11 +332,11 @@ class Loader(BasicDataset):
     def allPos(self):
         return self._allPos
 
-    def _split_A_hat(self,A): # NOTE: no change for music data
+    def _split_A_hat(self, A):  # NOTE: no change for music data
         A_fold = []
         fold_len = (self.n_users + self.m_items) // self.folds
         for i_fold in range(self.folds):
-            start = i_fold*fold_len
+            start = i_fold * fold_len
             if i_fold == self.folds - 1:
                 end = self.n_users + self.m_items
             else:
@@ -363,22 +344,19 @@ class Loader(BasicDataset):
             A_fold.append(self._convert_sp_mat_to_sp_tensor(A[start:end]).coalesce().to(world.device))
         return A_fold
 
-    def _convert_sp_mat_to_sp_tensor(self, X): # NOTE: no change for music data
+    def _convert_sp_mat_to_sp_tensor(self, X):  # NOTE: no change for music data
         coo = X.tocoo().astype(np.float32)
         row = torch.Tensor(coo.row).long()
         col = torch.Tensor(coo.col).long()
         index = torch.stack([row, col])
         data = torch.FloatTensor(coo.data)
         return torch.sparse.FloatTensor(index, data, torch.Size(coo.shape))
-        
+
     def getSparseGraph(self):
-        """
-        return self.graph: a adjacency matrix of which the shape is (self.n_users + self.m_items, self.n_users + self.m_items), which is "D^{-1/2}A D^{-1/2}".
-        """
         print("loading adjacency matrix")
         if self.Graph is None:
             try:
-                pre_adj_mat = sp.load_npz(self.path + '/s_pre_adj_mat.npz')
+                pre_adj_mat = sp.load_npz(self.path + f'/s_pre_adj_mat_{self.index_d}.npz')
                 print("successfully loaded...")
                 norm_adj = pre_adj_mat
             except:
@@ -391,30 +369,30 @@ class Loader(BasicDataset):
                 adj_mat[self.n_users:, :self.n_users] = R.T
                 adj_mat = adj_mat.todok()
                 # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
-                
+
                 rowsum = np.array(adj_mat.sum(axis=1))
                 d_inv = np.power(rowsum, -0.5).flatten()
                 d_inv[np.isinf(d_inv)] = 0.
                 d_mat = sp.diags(d_inv)
-                
+
                 norm_adj = d_mat.dot(adj_mat)
                 norm_adj = norm_adj.dot(d_mat)
                 norm_adj = norm_adj.tocsr()
                 end = time()
-                print(f"costing {end-s}s, saved norm_mat...")
-                sp.save_npz(self.path + '/s_pre_adj_mat.npz', norm_adj)
+                print(f"costing {end - s}s, saved norm_mat...")
+                sp.save_npz(self.path + f'/s_pre_adj_mat_{self.index_d}.npz', norm_adj)
 
             if self.split == True:
                 self.Graph = self._split_A_hat(norm_adj)
                 print("done split matrix")
             else:
                 self.Graph = self._convert_sp_mat_to_sp_tensor(norm_adj)
-                self.Graph = self.Graph.coalesce().to(world.device) # 对同一索引的多个值求和，ref：https://blog.csdn.net/qq_40697172/article/details/120516369
+                self.Graph = self.Graph.coalesce().to(
+                    world.device)  # 对同一索引的多个值求和，ref：https://blog.csdn.net/qq_40697172/article/details/120516369
                 print("don't split the matrix")
         return self.Graph
 
-
-    def __build_eval(self):  # todo: 后面可能要改，在模型的计算部分
+    def __build_eval(self):
         """
         return:
             dict: {user: [items]}
@@ -422,7 +400,7 @@ class Loader(BasicDataset):
         eval_data = {}
         for i, item in enumerate(self.evalItem):
             user = self.evalUser[i]
-            if eval_data.get(user): # dict 中无该元素，返回None
+            if eval_data.get(user):  # dict 中无该元素，返回None
                 eval_data[user].append(item)
             else:
                 eval_data[user] = [item]
@@ -436,7 +414,7 @@ class Loader(BasicDataset):
         test_data = {}
         for i, item in enumerate(self.testItem):
             user = self.testUser[i]
-            if test_data.get(user): # dict 中无该元素，返回None
+            if test_data.get(user):  # dict 中无该元素，返回None
                 test_data[user].append(item)
             else:
                 test_data[user] = [item]

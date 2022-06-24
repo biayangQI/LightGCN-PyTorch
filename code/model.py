@@ -81,8 +81,8 @@ class PureMF(BasicModel):
         return self.f(scores)
 
 class LightGCN(BasicModel):
-    def __init__(self, 
-                 config:dict, 
+    def __init__(self,
+                 config:dict,
                  dataset:BasicDataset):
         super(LightGCN, self).__init__()
         self.config = config
@@ -177,7 +177,14 @@ class LightGCN(BasicModel):
         items_emb = all_items
         rating = self.f(torch.matmul(users_emb, items_emb.t()))
         return rating
-    
+
+    def getUsersRatingCTR(self, users, items): # todo：debug　
+        all_users, all_items = self.computer()
+        users_emb = all_users[users.long()]
+        items_emb = all_items[items.long]
+        rating = self.f(torch.matmul(users_emb, items_emb.t()))
+        return rating
+
     def getEmbedding(self, users, pos_items, neg_items):
         all_users, all_items = self.computer()
         users_emb = all_users[users]
@@ -198,11 +205,23 @@ class LightGCN(BasicModel):
         pos_scores = torch.sum(pos_scores, dim=1)
         neg_scores = torch.mul(users_emb, neg_emb)
         neg_scores = torch.sum(neg_scores, dim=1)
-        
         loss = torch.mean(torch.nn.functional.softplus(neg_scores - pos_scores))
-        
         return loss, reg_loss
-       
+
+    def cross_entropy_loss(self, users, pos, neg):
+        (users_emb, pos_emb, neg_emb,
+         userEmb0, posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
+        reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
+                              posEmb0.norm(2).pow(2) +
+                              negEmb0.norm(2).pow(2)) / float(len(users))
+        pos_scores = torch.mul(users_emb, pos_emb)
+        pos_scores = torch.sum(pos_scores, dim=1)
+        neg_scores = torch.mul(users_emb, neg_emb)
+        neg_scores = torch.sum(neg_scores, dim=1)
+
+        loss = torch.mean(torch.log(torch.sigmoid(pos_scores) + torch.log(1-torch.sigmoid(neg_scores))))
+        return loss, reg_loss
+
     def forward(self, users, items):
         # compute embedding
         all_users, all_items = self.computer()

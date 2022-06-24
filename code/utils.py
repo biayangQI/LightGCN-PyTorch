@@ -51,6 +51,27 @@ class BPRLoss:
         return loss.cpu().item()
 
 
+class CrossEntroyLoss:
+    def __init__(self,
+                 recmodel : PairWiseModel,
+                 config : dict):
+        self.model = recmodel
+        self.weight_decay = config['decay']
+        self.lr = config['lr']
+        self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
+
+    def stageOne(self, users, pos, neg):
+        loss, reg_loss = self.model.cross_entropy_loss(users, pos, neg)
+        reg_loss = reg_loss*self.weight_decay
+        loss = loss + reg_loss
+
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
+        return loss.cpu().item()
+
+
+
 def UniformSample_original(dataset, neg_ratio = 1):
     dataset : BasicDataset
     allPos = dataset.allPos
@@ -61,6 +82,7 @@ def UniformSample_original(dataset, neg_ratio = 1):
     else:
         S = UniformSample_original_python(dataset)
     return S
+
 
 def UniformSample_original_python(dataset):
     """
