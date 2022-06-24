@@ -228,19 +228,26 @@ class Loader(BasicDataset):
         self.folds = config['A_n_fold']
         self.mode_dict = {'train': 0, "test": 1}
         self.mode = self.mode_dict['train']
-        self.n_user = 0
-        self.m_item = 0
+        self.n_user = 0  # for nn.embedding parameter
+        self.m_item = 0  # same as n_user
         self.index_d = config['dataset_index']
         train_file = path + f'/lightgcn/train_{self.index_d}_gcn.txt'
         eval_file = path + f'/lightgcn/eval_{self.index_d}_gcn.txt'
         test_file = path + f'/lightgcn/test_{self.index_d}_gcn.txt'
+        eval_file_ctr = path + f'/lightgcn/eval_{self.index_d}.txt'
+        test_file_ctr = path + f'/lightgcn/test_{self.index_d}.txt'
         self.path = path + f'/lightgcn'
         trainUniqueUsers, trainItem, trainUser = [], [], []
         evalUniqueUsers, evalItem, evalUser = [], [], []
         testUniqueUsers, testItem, testUser = [], [], []
+        evalItemCtr, evalUserCtr, evalLabelCtr = [], [], []
+        testItemCtr, testUserCtr, testLabelCtr = [], [], []
         self.traindataSize = 0
         self.evalDataSize = 0
         self.testDataSize = 0
+        self.evalDataSizeCtr = 0
+        self.testDataSizeCtr = 0
+
 
         with open(train_file, "rb") as f:
             for l in pickle.load(f):
@@ -256,7 +263,7 @@ class Loader(BasicDataset):
         self.trainUniqueUsers = np.array(trainUniqueUsers)
         self.trainUser = np.array(trainUser)
         self.trainItem = np.array(trainItem)
-
+        #======================= Top K ============================
         with open(eval_file, "rb") as f:
             for l in pickle.load(f):
                 if len(l) > 0:
@@ -283,12 +290,47 @@ class Loader(BasicDataset):
                     self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
                     self.testDataSize += len(items)
-        self.m_item += 1
-        self.n_user += 1
         self.testUniqueUsers = np.array(testUniqueUsers)
         self.testUser = np.array(testUser)
         self.testItem = np.array(testItem)
 
+        # ======================= CTR ============================
+        with open(eval_file_ctr, encoding='utf-8') as f:
+            for l in f.readlines():
+                if len(l) > 0:
+                    l = l.strip().split(' ')
+                    item_id = int(l[1])
+                    uid = int(l[0])
+                    label = int(l[2])
+                    evalUserCtr.extend([uid])
+                    evalItemCtr.extend([item_id])
+                    evalLabelCtr.extend([label])
+                    self.m_item = max(self.m_item, item_id)
+                    self.n_user = max(self.n_user, uid)
+                    self.evalDataSizeCtr += 1
+        self.evalUserCtr = np.array(evalUserCtr)  # 1-dimension
+        self.evalItemCtr = np.array(evalItemCtr)  # 1-dimension
+        self.evalLabelCtr = np.array(evalLabelCtr)  # 1-dimension
+
+        with open(test_file_ctr, encoding='utf-8') as f:
+            for l in f.readlines():
+                if len(l) > 0:
+                    l = l.strip().split(' ')
+                    item_id = int(l[1])
+                    uid = int(l[0])
+                    label = int(l[2])
+                    testUserCtr.extend([uid])
+                    testItemCtr.extend([item_id])
+                    testLabelCtr.extend([label])
+                    self.m_item = max(self.m_item, item_id)
+                    self.n_user = max(self.n_user, uid)
+                    self.testDataSizeCtr += 1
+        self.testUserCtr = np.array(testUserCtr)  # 1-dimension
+        self.testItemCtr = np.array(testItemCtr)  # 1-dimension
+        self.testLabelCtr = np.array(testLabelCtr)  # 1-dimension
+
+        self.m_item += 1
+        self.n_user += 1
         self.Graph = None
         print(f"{self.trainDataSize} interactions for training")
         print(f"{self.evalDataSize} interactions for evaling")
@@ -306,6 +348,8 @@ class Loader(BasicDataset):
         self._allPos = self.getUserPosItems(list(range(self.n_user)))  # 获取该用户交互的物品在矩阵 UserItemNet 中的列索引
         self.__evalDict = self.__build_eval()
         self.__testDict = self.__build_test()
+        self.__evalTensorCtr = self.__build_eval_ctr()
+        self.__testTensorCtr = self.__build_test_ctr()
         print(f"{world.dataset} is ready to go")
 
     @property
@@ -327,6 +371,14 @@ class Loader(BasicDataset):
     @property
     def testDict(self):
         return self.__testDict
+
+    @property
+    def evalTensorCtr(self):
+        return self.__evalTensorCtr
+
+    @property
+    def testTensorCtr(self):
+        return self.__testTensorCtr
 
     @property
     def allPos(self):
@@ -391,6 +443,25 @@ class Loader(BasicDataset):
                     world.device)  # 对同一索引的多个值求和，ref：https://blog.csdn.net/qq_40697172/article/details/120516369
                 print("don't split the matrix")
         return self.Graph
+
+    def __build_eval_ctr(self): # todo:debug
+        """
+                return:
+                    eval_tensor: 3 * evalDataSize, uid, item_id, label
+        """
+        eval_tensor = torch.cat((torch.tensor(self.evalUserCtr).view(1,-1), torch.tensor(self.evalItemCtr).view(1,-1), torch.tensor(self.evalLabelCtr).view(1,-1)), axis=0)
+        print(eval_tensor.shape)
+        return eval_tensor.long()
+
+    def __build_test_ctr(self):
+        """
+                return:
+                    test_tensor: 3 * testDataSize, uid, item_id, label
+        """
+        test_tensor = torch.cat((torch.tensor(self.testUserCtr).view(1,-1), torch.tensor(self.testItemCtr).view(1,-1), torch.tensor(self.testLabelCtr).view(1,-1)), axis=0)
+        print(test_tensor.shape)
+        return test_tensor.long()
+
 
     def __build_eval(self):
         """

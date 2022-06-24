@@ -60,7 +60,7 @@ try:
                 Procedure.CTRTest(dataset, Recmodel, epoch, 'eval', w, world.config['multicore'])
                 cprint("[TEST]")
                 Procedure.CTRTest(dataset, Recmodel, epoch, 'test', w, world.config['multicore'])
-            output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
+            output_information = Procedure.BPR_train_original(S, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
             print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
 finally:
     if world.tensorboard:

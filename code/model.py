@@ -115,6 +115,7 @@ class LightGCN(BasicModel):
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.getSparseGraph()
         print(f"lgn is already to go(dropout:{self.config['dropout']})")
+        self.loss = torch.nn.BCELoss()
 
         # print("save_txt")
     def __dropout_x(self, x, keep_prob):
@@ -178,11 +179,11 @@ class LightGCN(BasicModel):
         rating = self.f(torch.matmul(users_emb, items_emb.t()))
         return rating
 
-    def getUsersRatingCTR(self, users, items): # todo：debug　
+    def getUsersRatingCTR(self, users, items):
         all_users, all_items = self.computer()
-        users_emb = all_users[users.long()]
-        items_emb = all_items[items.long]
-        rating = self.f(torch.matmul(users_emb, items_emb.t()))
+        users_emb = all_users[users]
+        items_emb = all_items[items]
+        rating = self.f(torch.sum(torch.mul(users_emb, items_emb), axis=1))
         return rating
 
     def getEmbedding(self, users, pos_items, neg_items):
@@ -215,12 +216,18 @@ class LightGCN(BasicModel):
                               posEmb0.norm(2).pow(2) +
                               negEmb0.norm(2).pow(2)) / float(len(users))
         pos_scores = torch.mul(users_emb, pos_emb)
-        pos_scores = torch.sum(pos_scores, dim=1)
+        pos_scores = self.f(torch.sum(pos_scores, dim=1))
         neg_scores = torch.mul(users_emb, neg_emb)
-        neg_scores = torch.sum(neg_scores, dim=1)
+        neg_scores = self.f(torch.sum(neg_scores, dim=1))
+        scores = torch.cat((pos_scores, neg_scores), axis=0)
 
-        loss = torch.mean(torch.log(torch.sigmoid(pos_scores) + torch.log(1-torch.sigmoid(neg_scores))))
+        target_pos = torch.ones(pos_scores.shape).to(world.device)
+        target_neg = torch.zeros(neg_scores.shape).to(world.device)
+        target = torch.cat((target_pos,target_neg), axis=0)
+        loss = self.loss(scores, target)
+
         return loss, reg_loss
+
 
     def forward(self, users, items):
         # compute embedding
